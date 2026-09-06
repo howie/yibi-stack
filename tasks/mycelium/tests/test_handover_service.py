@@ -94,6 +94,33 @@ class TestWriteHandover:
         assert len(rows) == 1
         assert rows[0]["topic"] == "mirror failure"
 
+    def test_agents_eg_003_event_only_failure_emits_warning(self, paths: dict[str, Path]) -> None:
+        """AGENTS-EG-003：event 失敗但 JSONL 成功時，應發出 warning 而非靜默。"""
+        event_error = OSError("event write failed")
+
+        with (
+            patch(
+                "tasks.mycelium.handover_service._emit_handover_written_event",
+                return_value=(event_error, []),
+            ),
+            warnings.catch_warnings(record=True) as caught,
+        ):
+            warnings.simplefilter("always")
+            record = write_handover(
+                session_type=SessionType.debug,
+                topic="event only failure",
+                summary="mirror succeeds but event fails",
+                db_path=paths["db"],
+                jsonl_path=paths["jsonl"],
+            )
+
+        assert record.topic == "event only failure"
+        assert any("event write failed" in str(w.message) for w in caught)
+
+        rows = read_recent(last=1, db_path=paths["db"])
+        assert len(rows) == 1
+        assert rows[0]["topic"] == "event only failure"
+
     def test_agents_vl_002_empty_topic_raises(self, paths: dict[str, Path]) -> None:
         """AGENTS-VL-002：topic 為空字串應 raise。"""
         with pytest.raises(ValueError):
@@ -184,7 +211,9 @@ class TestWriteHandover:
             ]
         )
         for command in commands:
-            subprocess.run(command, capture_output=True, text=True, timeout=30, check=True)
+            subprocess.run(  # nosec B603
+                command, capture_output=True, text=True, timeout=30, check=True
+            )
 
         record = write_handover(
             session_type=SessionType.debug,
