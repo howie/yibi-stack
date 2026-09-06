@@ -94,20 +94,19 @@ class TestHandoverWriteCli:
     def test_hwc_eg_002_event_and_mirror_failures_emit_one_sanitized_error(
         self, tmp_path: Path
     ) -> None:
-        """HWC-EG-002：event 診斷保留於內部，但不得污染 mirror failure 公開輸出。"""
+        """HWC-EG-002：event+mirror 同時失敗時，CLI 顯示 [WARN] + sanitized error。"""
         from tasks.mycelium.handover_service import read_recent
 
         db_path = tmp_path / "handover.db"
         mirror_path = tmp_path / "private mirror path"
-        event_path = tmp_path / "private event path"
         mirror_path.mkdir()
-        event_path.mkdir()
+        event_error = OSError("internal event diagnostic")
         with (
             patch("tasks.mycelium.handover_service.HANDOVER_DB_PATH", db_path),
             patch("tasks.mycelium.handover_service.HANDOVER_JSONL_PATH", mirror_path),
             patch(
-                "tasks.mycelium.metrics_service.HANDOVER_EVENTS_JSONL_PATH",
-                event_path,
+                "tasks.mycelium.handover_service._emit_handover_written_event",
+                return_value=(event_error, []),
             ),
             warnings.catch_warnings(record=True) as caught,
         ):
@@ -127,9 +126,10 @@ class TestHandoverWriteCli:
             )
 
         assert result.exit_code == 1
-        assert result.output == "Error: DB 資料已保存，但 JSONL 備份寫入失敗\n"
+        assert "[WARN] event logging also failed" in result.output
+        assert "Error: DB 資料已保存，但 JSONL 備份寫入失敗" in result.output
         assert str(mirror_path) not in result.output
-        assert str(event_path) not in result.output
+        assert "internal event diagnostic" not in result.output
         assert "Errno" not in result.output
         assert "Traceback" not in result.output
         assert caught == []

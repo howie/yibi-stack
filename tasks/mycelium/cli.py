@@ -301,6 +301,8 @@ def handover_write(  # pylint: disable=too-many-arguments,too-many-locals
             working_dir=workdir,
         )
     except HandoverBackupError as e:
+        if e.event_error is not None:
+            click.echo("[WARN] event logging also failed", err=True)
         raise click.ClickException(str(e)) from None
 
     click.echo(f"✓ handover 已寫入：{record.id}")

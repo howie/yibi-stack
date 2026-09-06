@@ -578,3 +578,33 @@ def test_how_st_002_installed_wrapper_executes_real_db_cli(tmp_path: Path) -> No
     failed_rows = json.loads(failed_read_back.stdout)
     assert "committed despite failure" in {row["conversation_summary"] for row in failed_rows}
     assert (home / ".agents" / "handover" / "handover.db").is_file()
+
+
+def test_hww_sync_001_wrapper_option_list_matches_click_cli() -> None:
+    """HWW-SYNC-001：wrapper 的 case 選項必須與 Click CLI 的 value-bearing options 同步。"""
+    import re
+
+    import click as _click
+
+    from tasks.mycelium.cli import cli as _cli
+
+    write_cmd = _cli.commands["handover"].commands["write"]
+    cli_opts: set[str] = set()
+    for param in write_cmd.params:
+        if not isinstance(param, _click.Option):
+            continue
+        for opt in param.opts + param.secondary_opts:
+            if opt.startswith("-"):
+                cli_opts.add(opt)
+    cli_opts.discard("--workdir")
+
+    wrapper_src = WRAPPER.read_text(encoding="utf-8")
+    long_case = re.search(r"(--session-type[^)]+)\)", wrapper_src)
+    assert long_case, "cannot find value-bearing option case pattern in wrapper"
+    raw = long_case.group(1)
+    wrapper_opts = {o.strip() for o in raw.split("|") if o.strip().startswith("-")}
+
+    missing_in_wrapper = cli_opts - wrapper_opts
+    extra_in_wrapper = wrapper_opts - cli_opts
+    assert not missing_in_wrapper, f"CLI options not in wrapper: {missing_in_wrapper}"
+    assert not extra_in_wrapper, f"wrapper options not in CLI: {extra_in_wrapper}"
