@@ -1,4 +1,4 @@
-.PHONY: help lint lint-md format typecheck test check ci probe-agy install install-project install-one install-force-one status status-own uninstall promote install-scheduler uninstall-scheduler scheduler-status build-tools install-handover-hooks uninstall-handover-hooks install-all patch-pr-review-agents patch-gemini-allow-list patch-agy-allow-list release
+.PHONY: help lint lint-md format typecheck test check ci probe-agy install install-agent-wrappers install-project install-one install-force-one status status-own uninstall promote install-scheduler uninstall-scheduler scheduler-status build-tools install-handover-hooks uninstall-handover-hooks install-all patch-pr-review-agents patch-gemini-allow-list patch-agy-allow-list release
 
 # ─── Help ────────────────────────────────────────────────────────────────────
 
@@ -70,6 +70,14 @@ INSTALL_DIR := $(HOME)/.agents/skills
 CMD_DIR := commands
 CLAUDE_CMD_DIR := $(HOME)/.claude/commands
 
+# Public target writes global symlinks; guard must remain its literal first recipe line.
+install-agent-wrappers: ## Install shared DB CLI wrappers into ~/.agents/bin
+	@"$(CURDIR)/scripts/assert_not_worktree.sh" "$(CURDIR)" "make install-agent-wrappers"
+	@mkdir -p "$$HOME/.agents/bin"
+	@"$(CURDIR)/scripts/safe_symlink.sh" "$(CURDIR)/scripts/lessons" "$$HOME/.agents/bin/lessons"
+	@"$(CURDIR)/scripts/safe_symlink.sh" "$(CURDIR)/scripts/handover" "$$HOME/.agents/bin/handover"
+	@"$(CURDIR)/scripts/safe_symlink.sh" "$(CURDIR)/scripts/resolve-skill-repo" "$$HOME/.agents/bin/resolve-skill-repo"
+
 # guard 必須是 recipe 的第一行（字面上，不是「第一個可執行動作」）：後面的步驟會把
 # $(CURDIR) 寫進全域 symlink，失敗得太晚就已經污染 ~/.claude/skills/ 與 ~/.agents/。
 # 說明寫在 target 宣告之上而非 recipe 內，好讓「第一行就是 guard」無須任何但書。
@@ -93,7 +101,7 @@ install: ## Install scope=global skills to ~/.claude/skills/ + ~/.agents/skills/
 		fi; \
 		if [ "$$scope" != "global" ]; then continue; fi; \
 		for dir in "$(CLAUDE_SKILL_DIR)" "$(INSTALL_DIR)"; do \
-			$(CURDIR)/scripts/safe_symlink.sh "$(CURDIR)/$(SKILL_DIR)/$$name" "$$dir/$$name" || exit 1; \
+			"$(CURDIR)/scripts/safe_symlink.sh" "$(CURDIR)/$(SKILL_DIR)/$$name" "$$dir/$$name" || exit 1; \
 		done \
 	done
 	@echo ""
@@ -109,7 +117,7 @@ install: ## Install scope=global skills to ~/.claude/skills/ + ~/.agents/skills/
 			if [ ! -f "$$skill_md" ]; then continue; fi; \
 			scope=$$(grep -m1 '^scope:' "$$skill_md" | sed -e 's/scope:[[:space:]]*//' -e 's/[[:space:]]*#.*//' | tr -d '[:space:]'); \
 			if [ "$$scope" != "global" ]; then continue; fi; \
-			$(CURDIR)/scripts/safe_symlink.sh "$(CURDIR)/$$s" "$(INSTALL_DIR)/$$name" || exit 1; \
+			"$(CURDIR)/scripts/safe_symlink.sh" "$(CURDIR)/$$s" "$(INSTALL_DIR)/$$name" || exit 1; \
 		done \
 	done
 	@echo ""
@@ -120,7 +128,7 @@ install: ## Install scope=global skills to ~/.claude/skills/ + ~/.agents/skills/
 			[ -e "$$link" ] && continue; \
 			target=$$(readlink "$$link"); \
 			case "$$target" in \
-				$(CURDIR)/$(SKILL_DIR)/*|$(CURDIR)/plugins/*) \
+				"$(CURDIR)/$(SKILL_DIR)"/*|"$(CURDIR)/plugins"/*) \
 					rm "$$link" && echo "  [OK] removed stale: $$(basename $$link)" \
 					|| echo "  [WARN] failed to remove stale: $$(basename $$link)" >&2 ;; \
 			esac \
@@ -136,19 +144,17 @@ install: ## Install scope=global skills to ~/.claude/skills/ + ~/.agents/skills/
 	@# 兩份實作各自漂移的成本就是這個，統一由被測試覆蓋的那份承擔。
 	@for f in $(CMD_DIR)/*.md; do \
 		name=$$(basename $$f); \
-		$(CURDIR)/scripts/safe_symlink.sh "$(CURDIR)/$$f" "$(CLAUDE_CMD_DIR)/$$name" || exit 1; \
+		"$(CURDIR)/scripts/safe_symlink.sh" "$(CURDIR)/$$f" "$(CLAUDE_CMD_DIR)/$$name" || exit 1; \
 	done
 	@if [ -d "$(CMD_DIR)/scripts" ]; then \
-		$(CURDIR)/scripts/safe_symlink.sh "$(CURDIR)/$(CMD_DIR)/scripts" "$(CLAUDE_CMD_DIR)/scripts" || exit 1; \
+		"$(CURDIR)/scripts/safe_symlink.sh" "$(CURDIR)/$(CMD_DIR)/scripts" "$(CLAUDE_CMD_DIR)/scripts" || exit 1; \
 	fi
 	@echo ""
 	@echo "  Registering skill_repos[$(SKILL_REPO_KEY)] in ~/.agents/config.json"
 	@python3 scripts/register_skill_repo.py '$(CURDIR)' '$(SKILL_REPO_KEY)' \
 	|| { echo "  [FAIL] 無法更新 ~/.agents/config.json（見上方錯誤）"; exit 1; }
 	@echo "  [OK] skill_repos[$(SKILL_REPO_KEY)] = $(CURDIR)"
-	@mkdir -p "$$HOME/.agents/bin"
-	@$(CURDIR)/scripts/safe_symlink.sh "$(CURDIR)/scripts/lessons" "$$HOME/.agents/bin/lessons"
-	@$(CURDIR)/scripts/safe_symlink.sh "$(CURDIR)/scripts/resolve-skill-repo" "$$HOME/.agents/bin/resolve-skill-repo"
+	@$(MAKE) install-agent-wrappers
 	@# 安裝後驗收。「dst 是實體檔案」這一種已由 safe_symlink.sh 自己 exit 2 擋下
 	@# （上方每個呼叫點都會讓 make 中止），不再需要靠這裡兜底；但本驗收仍保留，
 	@# 因為它涵蓋 symlink「建立成功之後」才顯現、safe_symlink.sh 看不到的情況：
@@ -184,7 +190,7 @@ install-project: ## Install scope=project skills（本 repo 限定，ainization-
 		fi; \
 		if [ "$$scope" != "project" ]; then continue; fi; \
 		for dir in "$(CLAUDE_SKILL_DIR)" "$(INSTALL_DIR)"; do \
-			$(CURDIR)/scripts/safe_symlink.sh "$(CURDIR)/$(SKILL_DIR)/$$name" "$$dir/$$name" || exit 1; \
+			"$(CURDIR)/scripts/safe_symlink.sh" "$(CURDIR)/$(SKILL_DIR)/$$name" "$$dir/$$name" || exit 1; \
 		done \
 	done
 	@for pack in plugins/*/; do \
@@ -198,7 +204,7 @@ install-project: ## Install scope=project skills（本 repo 限定，ainization-
 			if [ ! -f "$$skill_md" ]; then continue; fi; \
 			scope=$$(grep -m1 '^scope:' "$$skill_md" | sed -e 's/scope:[[:space:]]*//' -e 's/[[:space:]]*#.*//' | tr -d '[:space:]'); \
 			if [ "$$scope" != "project" ]; then continue; fi; \
-			$(CURDIR)/scripts/safe_symlink.sh "$(CURDIR)/$$s" "$(INSTALL_DIR)/$$name" || exit 1; \
+			"$(CURDIR)/scripts/safe_symlink.sh" "$(CURDIR)/$$s" "$(INSTALL_DIR)/$$name" || exit 1; \
 		done \
 	done
 
@@ -208,8 +214,8 @@ install-one: ## Install one skill: make install-one SKILL=<name>
 	@mkdir -p "$(CLAUDE_SKILL_DIR)" || { echo "  [FAIL] Cannot create $(CLAUDE_SKILL_DIR)"; exit 1; }
 	@mkdir -p "$(INSTALL_DIR)" || { echo "  [FAIL] Cannot create $(INSTALL_DIR)"; exit 1; }
 	@if [ -d "$(SKILL_DIR)/$(SKILL)" ] || [ -L "$(SKILL_DIR)/$(SKILL)" ]; then \
-		$(CURDIR)/scripts/safe_symlink.sh "$(CURDIR)/$(SKILL_DIR)/$(SKILL)" "$(CLAUDE_SKILL_DIR)/$(SKILL)"; \
-		$(CURDIR)/scripts/safe_symlink.sh "$(CURDIR)/$(SKILL_DIR)/$(SKILL)" "$(INSTALL_DIR)/$(SKILL)"; \
+		"$(CURDIR)/scripts/safe_symlink.sh" "$(CURDIR)/$(SKILL_DIR)/$(SKILL)" "$(CLAUDE_SKILL_DIR)/$(SKILL)"; \
+		"$(CURDIR)/scripts/safe_symlink.sh" "$(CURDIR)/$(SKILL_DIR)/$(SKILL)" "$(INSTALL_DIR)/$(SKILL)"; \
 	else \
 		plugin_src=""; \
 		for p in plugins/*/skills/$(SKILL); do \
@@ -218,7 +224,7 @@ install-one: ## Install one skill: make install-one SKILL=<name>
 		if [ -z "$$plugin_src" ]; then \
 			echo "  [FAIL] $(SKILL) not found in skills/ or plugins/*/skills/" >&2; exit 1; \
 		fi; \
-		$(CURDIR)/scripts/safe_symlink.sh "$(CURDIR)/$$plugin_src" "$(INSTALL_DIR)/$(SKILL)"; \
+		"$(CURDIR)/scripts/safe_symlink.sh" "$(CURDIR)/$$plugin_src" "$(INSTALL_DIR)/$(SKILL)"; \
 	fi
 	@echo "[OK] $(SKILL) -> done"
 
@@ -228,8 +234,8 @@ install-force-one: ## 強制安裝單一 skill，覆蓋 real directory（搶回�
 	@mkdir -p "$(CLAUDE_SKILL_DIR)" || { echo "  [FAIL] Cannot create $(CLAUDE_SKILL_DIR)"; exit 1; }
 	@mkdir -p "$(INSTALL_DIR)" || { echo "  [FAIL] Cannot create $(INSTALL_DIR)"; exit 1; }
 	@if [ -d "$(SKILL_DIR)/$(SKILL)" ] || [ -L "$(SKILL_DIR)/$(SKILL)" ]; then \
-		$(CURDIR)/scripts/safe_symlink.sh --force "$(CURDIR)/$(SKILL_DIR)/$(SKILL)" "$(CLAUDE_SKILL_DIR)/$(SKILL)"; \
-		$(CURDIR)/scripts/safe_symlink.sh --force "$(CURDIR)/$(SKILL_DIR)/$(SKILL)" "$(INSTALL_DIR)/$(SKILL)"; \
+		"$(CURDIR)/scripts/safe_symlink.sh" --force "$(CURDIR)/$(SKILL_DIR)/$(SKILL)" "$(CLAUDE_SKILL_DIR)/$(SKILL)"; \
+		"$(CURDIR)/scripts/safe_symlink.sh" --force "$(CURDIR)/$(SKILL_DIR)/$(SKILL)" "$(INSTALL_DIR)/$(SKILL)"; \
 	else \
 		plugin_src=""; \
 		for p in plugins/*/skills/$(SKILL); do \
@@ -238,7 +244,7 @@ install-force-one: ## 強制安裝單一 skill，覆蓋 real directory（搶回�
 		if [ -z "$$plugin_src" ]; then \
 			echo "  [FAIL] $(SKILL) not found in skills/ or plugins/*/skills/" >&2; exit 1; \
 		fi; \
-		$(CURDIR)/scripts/safe_symlink.sh --force "$(CURDIR)/$$plugin_src" "$(INSTALL_DIR)/$(SKILL)"; \
+		"$(CURDIR)/scripts/safe_symlink.sh" --force "$(CURDIR)/$$plugin_src" "$(INSTALL_DIR)/$(SKILL)"; \
 	fi
 	@echo "[OK] $(SKILL) -> done (forced)"
 
@@ -370,7 +376,7 @@ uninstall: ## Remove own symlinks from ~/.claude/skills/ and ~/.agents/skills/
 			if [ -L "$(INSTALL_DIR)/$$name" ]; then \
 				target=$$(readlink "$(INSTALL_DIR)/$$name"); \
 				case "$$target" in \
-					$(CURDIR)/plugins/*) \
+					"$(CURDIR)/plugins"/*) \
 						rm "$(INSTALL_DIR)/$$name" && echo "  [OK] $$name removed (agents/plugin)" \
 						    || echo "  [FAIL] $$name FAILED to remove from $(INSTALL_DIR)" ;; \
 				esac \
@@ -383,7 +389,7 @@ uninstall: ## Remove own symlinks from ~/.claude/skills/ and ~/.agents/skills/
 			[ -e "$$link" ] && continue; \
 			target=$$(readlink "$$link"); \
 			case "$$target" in \
-				$(CURDIR)/$(SKILL_DIR)/*|$(CURDIR)/plugins/*) \
+				"$(CURDIR)/$(SKILL_DIR)"/*|"$(CURDIR)/plugins"/*) \
 					rm "$$link" && echo "  [OK] removed stale: $$(basename $$link)" \
 					|| echo "  [WARN] failed to remove stale: $$(basename $$link)" >&2 ;; \
 			esac \
