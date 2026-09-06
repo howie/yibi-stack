@@ -117,7 +117,7 @@ install: ## Install scope=global skills to ~/.claude/skills/ + ~/.agents/skills/
 			if [ ! -f "$$skill_md" ]; then continue; fi; \
 			scope=$$(grep -m1 '^scope:' "$$skill_md" | sed -e 's/scope:[[:space:]]*//' -e 's/[[:space:]]*#.*//' | tr -d '[:space:]'); \
 			if [ "$$scope" != "global" ]; then continue; fi; \
-			$(CURDIR)/scripts/safe_symlink.sh "$(CURDIR)/$$s" "$(INSTALL_DIR)/$$name" || exit 1; \
+			"$(CURDIR)/scripts/safe_symlink.sh" "$(CURDIR)/$$s" "$(INSTALL_DIR)/$$name" || exit 1; \
 		done \
 	done
 	@echo ""
@@ -128,7 +128,7 @@ install: ## Install scope=global skills to ~/.claude/skills/ + ~/.agents/skills/
 			[ -e "$$link" ] && continue; \
 			target=$$(readlink "$$link"); \
 			case "$$target" in \
-				$(CURDIR)/$(SKILL_DIR)/*|$(CURDIR)/plugins/*) \
+				"$(CURDIR)/$(SKILL_DIR)"/*|"$(CURDIR)/plugins"/*) \
 					rm "$$link" && echo "  [OK] removed stale: $$(basename $$link)" \
 					|| echo "  [WARN] failed to remove stale: $$(basename $$link)" >&2 ;; \
 			esac \
@@ -204,7 +204,7 @@ install-project: ## Install scope=project skills（本 repo 限定，ainization-
 			if [ ! -f "$$skill_md" ]; then continue; fi; \
 			scope=$$(grep -m1 '^scope:' "$$skill_md" | sed -e 's/scope:[[:space:]]*//' -e 's/[[:space:]]*#.*//' | tr -d '[:space:]'); \
 			if [ "$$scope" != "project" ]; then continue; fi; \
-			$(CURDIR)/scripts/safe_symlink.sh "$(CURDIR)/$$s" "$(INSTALL_DIR)/$$name" || exit 1; \
+			"$(CURDIR)/scripts/safe_symlink.sh" "$(CURDIR)/$$s" "$(INSTALL_DIR)/$$name" || exit 1; \
 		done \
 	done
 
@@ -214,8 +214,8 @@ install-one: ## Install one skill: make install-one SKILL=<name>
 	@mkdir -p "$(CLAUDE_SKILL_DIR)" || { echo "  [FAIL] Cannot create $(CLAUDE_SKILL_DIR)"; exit 1; }
 	@mkdir -p "$(INSTALL_DIR)" || { echo "  [FAIL] Cannot create $(INSTALL_DIR)"; exit 1; }
 	@if [ -d "$(SKILL_DIR)/$(SKILL)" ] || [ -L "$(SKILL_DIR)/$(SKILL)" ]; then \
-		$(CURDIR)/scripts/safe_symlink.sh "$(CURDIR)/$(SKILL_DIR)/$(SKILL)" "$(CLAUDE_SKILL_DIR)/$(SKILL)"; \
-		$(CURDIR)/scripts/safe_symlink.sh "$(CURDIR)/$(SKILL_DIR)/$(SKILL)" "$(INSTALL_DIR)/$(SKILL)"; \
+		"$(CURDIR)/scripts/safe_symlink.sh" "$(CURDIR)/$(SKILL_DIR)/$(SKILL)" "$(CLAUDE_SKILL_DIR)/$(SKILL)"; \
+		"$(CURDIR)/scripts/safe_symlink.sh" "$(CURDIR)/$(SKILL_DIR)/$(SKILL)" "$(INSTALL_DIR)/$(SKILL)"; \
 	else \
 		plugin_src=""; \
 		for p in plugins/*/skills/$(SKILL); do \
@@ -224,7 +224,7 @@ install-one: ## Install one skill: make install-one SKILL=<name>
 		if [ -z "$$plugin_src" ]; then \
 			echo "  [FAIL] $(SKILL) not found in skills/ or plugins/*/skills/" >&2; exit 1; \
 		fi; \
-		$(CURDIR)/scripts/safe_symlink.sh "$(CURDIR)/$$plugin_src" "$(INSTALL_DIR)/$(SKILL)"; \
+		"$(CURDIR)/scripts/safe_symlink.sh" "$(CURDIR)/$$plugin_src" "$(INSTALL_DIR)/$(SKILL)"; \
 	fi
 	@echo "[OK] $(SKILL) -> done"
 
@@ -234,8 +234,8 @@ install-force-one: ## 強制安裝單一 skill，覆蓋 real directory（搶回�
 	@mkdir -p "$(CLAUDE_SKILL_DIR)" || { echo "  [FAIL] Cannot create $(CLAUDE_SKILL_DIR)"; exit 1; }
 	@mkdir -p "$(INSTALL_DIR)" || { echo "  [FAIL] Cannot create $(INSTALL_DIR)"; exit 1; }
 	@if [ -d "$(SKILL_DIR)/$(SKILL)" ] || [ -L "$(SKILL_DIR)/$(SKILL)" ]; then \
-		$(CURDIR)/scripts/safe_symlink.sh --force "$(CURDIR)/$(SKILL_DIR)/$(SKILL)" "$(CLAUDE_SKILL_DIR)/$(SKILL)"; \
-		$(CURDIR)/scripts/safe_symlink.sh --force "$(CURDIR)/$(SKILL_DIR)/$(SKILL)" "$(INSTALL_DIR)/$(SKILL)"; \
+		"$(CURDIR)/scripts/safe_symlink.sh" --force "$(CURDIR)/$(SKILL_DIR)/$(SKILL)" "$(CLAUDE_SKILL_DIR)/$(SKILL)"; \
+		"$(CURDIR)/scripts/safe_symlink.sh" --force "$(CURDIR)/$(SKILL_DIR)/$(SKILL)" "$(INSTALL_DIR)/$(SKILL)"; \
 	else \
 		plugin_src=""; \
 		for p in plugins/*/skills/$(SKILL); do \
@@ -244,7 +244,7 @@ install-force-one: ## 強制安裝單一 skill，覆蓋 real directory（搶回�
 		if [ -z "$$plugin_src" ]; then \
 			echo "  [FAIL] $(SKILL) not found in skills/ or plugins/*/skills/" >&2; exit 1; \
 		fi; \
-		$(CURDIR)/scripts/safe_symlink.sh --force "$(CURDIR)/$$plugin_src" "$(INSTALL_DIR)/$(SKILL)"; \
+		"$(CURDIR)/scripts/safe_symlink.sh" --force "$(CURDIR)/$$plugin_src" "$(INSTALL_DIR)/$(SKILL)"; \
 	fi
 	@echo "[OK] $(SKILL) -> done (forced)"
 
@@ -376,7 +376,7 @@ uninstall: ## Remove own symlinks from ~/.claude/skills/ and ~/.agents/skills/
 			if [ -L "$(INSTALL_DIR)/$$name" ]; then \
 				target=$$(readlink "$(INSTALL_DIR)/$$name"); \
 				case "$$target" in \
-					$(CURDIR)/plugins/*) \
+					"$(CURDIR)/plugins"/*) \
 						rm "$(INSTALL_DIR)/$$name" && echo "  [OK] $$name removed (agents/plugin)" \
 						    || echo "  [FAIL] $$name FAILED to remove from $(INSTALL_DIR)" ;; \
 				esac \
@@ -389,7 +389,7 @@ uninstall: ## Remove own symlinks from ~/.claude/skills/ and ~/.agents/skills/
 			[ -e "$$link" ] && continue; \
 			target=$$(readlink "$$link"); \
 			case "$$target" in \
-				$(CURDIR)/$(SKILL_DIR)/*|$(CURDIR)/plugins/*) \
+				"$(CURDIR)/$(SKILL_DIR)"/*|"$(CURDIR)/plugins"/*) \
 					rm "$$link" && echo "  [OK] removed stale: $$(basename $$link)" \
 					|| echo "  [WARN] failed to remove stale: $$(basename $$link)" >&2 ;; \
 			esac \
