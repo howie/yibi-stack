@@ -27,7 +27,9 @@ description: >
 ## Usage
 
 ```text
-/issue-triage                       <- 盤點目前 repo 全部 open GitHub issue，產出唯讀報告
+/issue-triage                       <- 盤點目前 repo 全部 open GitHub issue（預設 --depth deep）
+/issue-triage --depth fast          <- 快速模式：只查 code 症狀，不交叉比對 openspec/ADR
+/issue-triage --depth deep          <- 深度模式（預設）：交叉比對 openspec archive / ADR / 流程改制
 /issue-triage --jira <PROJECT>      <- 同上，加上指定 Jira 專案的 open Bug
 /issue-triage --jira YB             <- 範例：盤點 GitHub issue + YB 專案 Jira Bug
 /issue-triage #<n>                  <- 只研判單一 GitHub issue
@@ -35,6 +37,20 @@ description: >
 /issue-triage --apply               <- 產報告後，經逐項確認才執行寫入動作
 /issue-triage --jira YB --apply    <- GitHub + Jira 都盤點，且經確認後執行寫入
 ```
+
+### `--depth` 模式差異
+
+| | `fast` | `deep`（預設） |
+|---|--------|--------------|
+| 查 code 症狀（Step 3b） | Yes | Yes |
+| 查 openspec change 綁定（Step 3c） | Yes | Yes |
+| **交叉比對 openspec archive / ADR（Step 3c′）** | **No** | **Yes** |
+| **查流程改制是否讓 issue 失效（Step 3c′）** | **No** | **Yes** |
+| 適用情境 | 快速掃描、issue 數量少 | 定期盤點（月/季）、issue 積壓多 |
+
+`fast` 模式的風險：`waiting-pm` / `spec-gap` / `harness` 類 issue 可能 label 過時——PM
+已裁決但沒人回頭關票、spec gap 已由 archived change 補齊、harness 工具已改版讓原 issue
+失效。這些只有 `deep` 模式會抓到。
 
 ---
 
@@ -196,6 +212,71 @@ issue/bug 數量多時，**平行 dispatch 一個唯讀探索 subagent**（不�
 用 **Read tool** 讀 `openspec/changes/<name>/tasks.md`。
 以 checkbox 狀態為完成度 ground truth。找不到時查 archive。
 **若本體與 archive 皆讀不到 tasks.md，視為「未完成」，不得 CLOSE**。
+
+### 3c′. 深度交叉比對（僅 `--depth deep`，預設啟用）
+
+**目的**：label 是最不會被更新的東西——PM 做了裁決、spec 補齊了 gap、harness 工具改版了，
+但原本開的追蹤 issue 不會自動關閉。本步驟交叉查 openspec archive / ADR / 流程狀態，
+找出 label 過時、實質上已解決或已失效的 issue。**越舊的 issue 越要查。**
+
+對以下三類 issue，**不能只靠 label 判 KEEP**：
+
+#### (a) `waiting-pm` / `spec: waiting-pm` / `wait-PM` 類
+
+逐一交叉查：
+
+1. **openspec archive**：issue 提到的 change 是否已 archive？archive 代表 delta 已套進
+   stable spec，PM 裁決可能已在 archive 過程中落地。
+   查法：`ls docs/openspec/changes/archive/ | grep '<change-number>'`
+2. **ADR**：是否已有 ADR 承接該裁決？
+   查法：`grep -rl '<關鍵詞>' docs/adr/`
+3. **stable spec 內容**：PM 裁決的具體答案是否已寫進 spec normative 句？
+   查法：`grep -n '<裁決內容關鍵詞>' docs/openspec/specs/<cap>/spec.md`
+
+**判準**：issue 問的「待裁決問題」本身已有答案（寫進 spec / ADR / code）→ CLOSE 或
+UPDATE-SCOPE。change 已 archive **不等於**裁決已完成——archive 是 delta 套進 stable spec，
+OQ 可能仍開放。
+
+#### (b) `spec-gap` 類
+
+逐一交叉查：
+
+1. **有無 active 或 archived change 補齊**：
+   查法：`ls docs/openspec/changes/ docs/openspec/changes/archive/ | grep '<相關 Epic 或 capability>'`
+2. **ADR 是否裁決該 gap 為 non-goal 或由其他方案解決**：
+   查法：`grep -rl '<gap 關鍵詞>' docs/adr/`
+3. **code 是否已實作**（即使 spec 未更新，code 端可能已補齊）：
+   查法：`grep -rn '<功能關鍵詞>' backend/src/ mobile/lib/`
+
+**判準**：gap 已被 change 補齊（查 archive 的 tasks.md 全 `[x]`）→ CLOSE。
+有 active change 承接但未完成 → UPDATE-SCOPE（改為追蹤該 change）。
+有 ADR 承接（`status: proposed`）→ UPDATE-SCOPE（改為追蹤 ADR 裁決）。
+
+#### (c) `harness` 類
+
+逐一判斷是否仍有效：
+
+1. **流程改制**：harness-queue（#1014）已於 2026-08-31 退場，從該佇列遷移出的
+   「寫散文加進 rule」類 issue 的正確做法現在是走 Mycelium typed lesson，不再即發 PR。
+   這類 issue 若只剩「寫一段散文」→ 可 CLOSE（改走 Mycelium）。
+2. **工具改版**：issue 追蹤的 bug 是否已被 CLI / plugin 新版修復？
+   查法：`spectra --version` 比對 issue 建立時的版本
+3. **gate 是否已建**：issue 要求的 gate script 是否已存在？
+   查法：`ls scripts/harness/ | grep '<gate-name>'`
+4. **過時副本**：`.claude/hooks/` 的檔案是否為 plugin 的過時殘留（settings.json 未註冊）？
+
+**判準**：觸發路徑已不存在 / 工具已修復 / 流程已改制讓原 issue 無意義 → CLOSE。
+issue 是「gate script 不存在」但仍有效 → KEEP。
+scope 已縮小（部分完成）→ UPDATE-SCOPE。
+
+#### 平行 dispatch
+
+issue 數量多時（>10），按上述三類各 dispatch 一個 fork subagent 平行交叉比對，
+與 Step 3b 的 code 驗證 subagent 並行。prompt 需附：
+
+- archived change 清單（`ls archive/`）
+- active change 清單（`ls docs/openspec/changes/`）
+- ADR 清單（`ls docs/adr/`）
 
 ### 3d. 檢查留言意圖訊號（P3）
 
@@ -498,3 +579,5 @@ editJiraIssue({
 | Jira 寫入被 hook 擋 | 本 repo 的 `pre-jira-write.sh` hook 機械攔截特定條件的 Jira 寫入；不繞過，照 hook 回報的限制處理 |
 | JQL `type = Bug` 查不到東西 | 某些 Jira 專案的 issue type 叫 `Defect` 而非 `Bug`。確認專案的 issue type 名稱，必要時改 JQL 為 `type = Defect` |
 | 不帶 `--jira` 時會查 Jira 嗎 | 不會。Jira 盤點需明確帶 `--jira <PROJECT>` |
+| `--depth fast` 和 `deep` 差在哪 | `fast` 只查 code 症狀（Step 3b/3c）；`deep`（預設）額外交叉比對 openspec archive / ADR / 流程改制（Step 3c′），能抓到 label 過時的 waiting-pm / spec-gap / harness issue |
+| 為什麼 `deep` 是預設 | label 是最不會被更新的東西——PM 裁決落地、spec gap 補齊、harness 流程改制後，原 issue 不會自動關閉。只靠 label 判 KEEP 等於信任 label 的新鮮度，而那正是 triage 要驗證的對象（事故：yibi-mvp 2026-09-06 盤點，第一輪 fast 漏了 10 個可 CLOSE/UPDATE-SCOPE 的 issue） |
