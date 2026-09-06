@@ -766,7 +766,7 @@ Actionable NIT = MAY). Blocking is decided by the Evidence gate below; NIT never
 | **Consensus Critical** | ≥2 voices mark Critical with no DISAGREE | Must fix |
 | **Consensus Important** | ≥2 voices mark Important with no DISAGREE | Must fix |
 | **Disputed** | 1 voice marks Critical/Important; others DISAGREE | List the dispute; user decides |
-| **Single-voice Critical** | 1 voice marks Critical; others did not mention | Lead **empirically refutes or confirms** (run a minimal repro), not judge-by-reasoning → confirmed: elevate to Consensus; refuted: drop with the evidence noted; can't test: list as Disputed |
+| **Single-voice Critical** | 1 voice marks Critical; others did not mention | Lead MUST execute before adopting — do NOT skip by reasoning alone: ① Extract the finding's claimed pattern (the specific syntax, string, or construct the finding says is problematic) ② `grep -rn '<pattern>' <relevant-dirs>` — report hit count ③ Zero hits + pre-existing limitation (old code also didn't handle it) → demote to Deferred with `Grep verification: <command> → 0 hits` ④ Nonzero hits → confirm as Consensus Critical ⑤ Can't grep (no concrete pattern) → list as Disputed. (4× recurrence: PR #626/#653/#815/#1774 — lead adopted single-voice Criticals by reasoning without grepping actual usage; all turned out to be zero-hit pre-existing limitations.) |
 | **Actionable NIT** | Any 1 voice marks NIT and it's not subjective preference | **Deferred — never blocks**, any round. Lead MAY fix trivially in-round; doing so is not a gate |
 | **Withdrawn** | Marked WITHDRAW in R2 | Remove from list |
 | **Voice unavailable** | That voice failed R1/R2 twice in a row | Note in final.md; do not block |
@@ -844,7 +844,7 @@ group-review ({{N}}/3 voices active)
 1. <finding>...
 
 ## Deferred for lack of evidence (not blocking; reason stated per item)
-1. <finding> — demoted: <reason>...
+1. <finding> — demoted: <reason>... (For single-voice Critical demotions, include `Grep verification: <command> → <N> hits` in the demotion reason.)
 
 ## Outside contract (not blocking; mapping reason stated per item)
 1. <finding> — <Non-goal / accepted boundary / Follow-up / invalid mapping>...
