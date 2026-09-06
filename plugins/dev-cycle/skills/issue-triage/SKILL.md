@@ -243,8 +243,10 @@ OQ 可能仍開放。
 
 1. **有無 active 或 archived change 補齊**：
    查法：`ls docs/openspec/changes/ docs/openspec/changes/archive/ | grep '<相關 Epic 或 capability>'`
-2. **ADR 是否裁決該 gap 為 non-goal 或由其他方案解決**
-3. **code 是否已實作**（即使 spec 未更新，code 端可能已補齊）
+2. **ADR 是否裁決該 gap 為 non-goal 或由其他方案解決**：
+   查法：`grep -rl '<gap 關鍵詞>' docs/adr/`
+3. **code 是否已實作**（即使 spec 未更新，code 端可能已補齊）：
+   查法：`grep -rn '<功能關鍵詞>' backend/src/ mobile/lib/`
 
 **判準**：gap 已被 change 補齊（查 archive 的 tasks.md 全 `[x]`）→ CLOSE。
 有 active change 承接但未完成 → UPDATE-SCOPE（改為追蹤該 change）。
